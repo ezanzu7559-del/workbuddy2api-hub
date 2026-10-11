@@ -82,16 +82,16 @@ class DeepSeekFacade(BaseHTTPRequestHandler):
         norm = path
         if norm.startswith("/v1"):
             norm = norm[3:] or "/"
-        if method == "GET" and norm in ("/health", "/"):
+        if method == "GET" and norm == "/health":
             self._json_bytes({"ok": True, "service": "deepseek-facade"})
         elif method == "GET" and norm == "/models":
             self._handle_models()
         elif method == "POST" and norm == "/chat/completions":
             self._handle_chat()
         else:
-            self._json_bytes(
-                {"error": {"message": "not found", "type": "invalid_request_error",
-                           "code": 404}}, 404)
+            # 面板/管理端点（/panel/login、/accounts/import、/ 等）原样转发到网关。
+            # Render 上对外只有反代，网关 8788 在容器内部，不转发这些端点就导不了账号。
+            self._forward(method, path)
 
     def do_GET(self):
         self._route("GET", self.path)
@@ -171,6 +171,53 @@ class DeepSeekFacade(BaseHTTPRequestHandler):
             self.send_header("Content-Length", cl)
         self.end_headers()
 
+        if "text/event-stream" in content_type:
+            while True:
+                chunk = upstream.read(4096)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        else:
+            self.wfile.write(upstream.read())
+
+    # ---- 通用转发（面板 / 管理端点）--------------------------------------
+    def _forward(self, method, path):
+        """把面板/管理端点的请求原样转发到网关。
+
+        网关的面板登录(/panel/login)、账号导入(/accounts/import)、状态(/status)、
+        设置(/settings/*)等端点在 Render 上不对公网开放，这里透传过去，让
+        add-account.py 等工具能通过反代操作网关。
+        """
+        url = self.gateway.rstrip("/") + path
+        length = int(self.headers.get("Content-Length") or 0)
+        data = self.rfile.read(length) if length > 0 else None
+        req = urllib.request.Request(url, data=data, method=method)
+        for h in ("Authorization", "Content-Type", "X-Panel-Token", "X-Realm", "Accept"):
+            if h in self.headers:
+                req.add_header(h, self.headers[h])
+        try:
+            upstream = urllib.request.urlopen(req, timeout=600)
+        except urllib.error.HTTPError as e:
+            err_body = e.read()
+            self.send_response(e.code)
+            ct = e.headers.get("Content-Type", "application/json")
+            self.send_header("Content-Type", ct)
+            self.send_header("Content-Length", str(len(err_body)))
+            self.end_headers()
+            self.wfile.write(err_body)
+            return
+        except urllib.error.URLError as e:
+            return self._json_bytes(
+                {"error": {"message": "gateway unreachable: %s" % e.reason,
+                           "type": "server_error", "code": 502}}, 502)
+        content_type = upstream.headers.get("Content-Type", "")
+        self.send_response(upstream.status)
+        self.send_header("Content-Type", content_type)
+        cl = upstream.headers.get("Content-Length")
+        if cl and "text/event-stream" not in content_type:
+            self.send_header("Content-Length", cl)
+        self.end_headers()
         if "text/event-stream" in content_type:
             while True:
                 chunk = upstream.read(4096)
