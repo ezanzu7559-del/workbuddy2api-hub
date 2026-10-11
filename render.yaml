@@ -9,5 +9,7 @@ services:
         sync: false
       - key: PANEL_PASSWORD
         value: "change-me-to-a-strong-password"
+      - key: WB_PROXY_DEFAULT_REALM
+        value: "cn"
       - key: TZ
         value: "Asia/Shanghai"
