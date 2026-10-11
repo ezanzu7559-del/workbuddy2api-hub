@@ -36,15 +36,15 @@ git push -u origin main
 部署完成后，得到类似 `https://workbuddy-deepseek-api.onrender.com` 的地址。
 
 ### 4. 导入账号（重要）
-Render 免费层**重新部署会丢数据**，所以部署后要把账号重新导一次。用本地那个账号文件：
+Render 免费层**重新部署会丢数据**，所以部署后要把账号重新导一次。用工作区根目录的 `accounts-backup.json`（已含全部 4 个账号）：
 
 ```bash
 python add-account.py --gateway https://你的应用.onrender.com \
   --password 你设的面板密码 \
-  --file "C:\Users\Administrator\Downloads\codebuddy-accounts-3-1791699088769 (1).txt"
+  --file accounts-backup.json
 ```
 
-> 每重新部署一次，都要重跑这条命令重新导账号。
+> 每重新部署一次，都要重跑这条命令重新导账号。备份文件 `accounts-backup.json` 含 4 个国内版账号（ea80f547 / acaf75d7 / 6c03c0b8 / e8a4c9f6）。
 
 ### 5. 客户端配置
 
