@@ -8,7 +8,7 @@ services:
       - key: API_KEY
         sync: false
       - key: PANEL_PASSWORD
-        value: "TH2hzEezAYFFKepF"
+        sync: false
       - key: WB_PROXY_DEFAULT_REALM
         value: "cn"
       - key: TZ
