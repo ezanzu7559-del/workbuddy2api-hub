@@ -87,7 +87,9 @@ class DeepSeekFacade(BaseHTTPRequestHandler):
         elif method == "GET" and norm == "/models":
             self._handle_models()
         elif method == "POST" and norm == "/chat/completions":
-            self._handle_chat()
+            self._handle_openai_post("/v1/chat/completions")
+        elif method == "POST" and norm == "/responses":
+            self._handle_openai_post("/v1/responses")
         else:
             # 面板/管理端点（/panel/login、/accounts/import、/ 等）原样转发到网关。
             # Render 上对外只有反代，网关 8788 在容器内部，不转发这些端点就导不了账号。
@@ -110,8 +112,8 @@ class DeepSeekFacade(BaseHTTPRequestHandler):
         }
         self._json_bytes(data)
 
-    # ---- /chat/completions ------------------------------------------------
-    def _handle_chat(self):
+    # ---- OpenAI 兼容 POST 端点（chat/completions、responses）----------------
+    def _handle_openai_post(self, endpoint):
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
             return self._json_bytes(
@@ -134,7 +136,7 @@ class DeepSeekFacade(BaseHTTPRequestHandler):
             body["model"] = rewrite_model(str(body.get("model") or ""))
 
         # 转发到网关
-        url = self.gateway.rstrip("/") + "/v1/chat/completions"
+        url = self.gateway.rstrip("/") + endpoint
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type", "application/json")
